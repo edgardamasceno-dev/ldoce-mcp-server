@@ -1,14 +1,24 @@
 {
-  "name": "ldoce-mcp",
+  "name": "ldoce-mcp-server",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "A Model Context Protocol server",
+  "type": "module",
+  "bin": {
+    "ldoce-mcp-server": "./build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "inspector": "npx @modelcontextprotocol/inspector build/index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
     "axios": "^1.8.3",
