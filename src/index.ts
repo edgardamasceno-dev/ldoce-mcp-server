@@ -10,275 +10,314 @@ import {
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 
-/* Interfaces para o formato do JSON */
-
-export interface Audio {
-  text?: string;
-  audioUrl: string | null;
-}
-
-export interface Example {
-  text: string;
-  audioUrl: string | null;
-}
-
-export interface Sense {
-  number: number;
-  grammar?: string;
-  field?: string;
-  activation?: string;
-  definition?: string;
-  examples?: Example[];
-  reference?: string;
-  colloquialExamples?: Example[];
-  register?: string;
-  example?: Example;
-}
-
-export interface Header {
-  word: string;
-  hyphenation: string;
-  homographNumber: string;
-  partOfSpeech: string;
-  inflections?: string[];
-}
-
-export interface Pronunciations {
-  british: Audio;
-  american: Audio;
-}
-
-export interface EntryDetail {
-  id: string;
-  type: string;
-  header: Header;
-  pronunciations: Pronunciations;
-  senses: Sense[];
-}
-
-export interface CorpusExampleGroup {
-  group: string;
-  examples: string[];
-}
-
-export interface Origin {
-  word: string;
-  originId: string;
-  language: string;
-  form: string;
-}
-
-export interface DictionaryEntry {
-  word: string;
-  introduction: string;
-  relatedTopics: string[];
-  entries: EntryDetail[];
-  corpusExamples: CorpusExampleGroup[];
-  origin: Origin;
-}
-
 /**
- * Busca e extrai informações do Longman Dictionary para uma determinada palavra.
- * Inclui a extração dos corpus examples a partir do HTML.
- * @param word Palavra a ser consultada.
- * @returns Uma Promise com a entrada do dicionário no formato JSON.
+ * Estruturas de dados finais (semelhantes às que você pediu)
  */
-export async function fetchDictionaryEntry(word: string): Promise<DictionaryEntry> {
+
+// Exemplo de JSON final:
+//
+// {
+//   "dictionaryEntries": [ ... ],
+//   "simpleForm": { ... },
+//   "continuousForm": { ... }
+// }
+
+interface DictionaryExample {
+  text: string;
+  audioUrl?: string;
+}
+
+interface DictionarySense {
+  number?: number;
+  grammar?: string;
+  activation?: string;
+  definition?: string | { text: string; url: string };
+  examples?: DictionaryExample[];
+}
+
+interface DictionaryParsedEntry {
+  word: string;           // ex.: "rot"
+  pronunciation: string;  // ex.: "/rɒt/ (US: rɑːt)"
+  partOfSpeech: string;   // ex.: "verb", "noun", etc.
+  inflections: string[];  // ex.: ["rotted", "rotting"]
+  relatedTopics: string[]; // ex.: ["Biology"]
+  senses: DictionarySense[];
+}
+
+interface ConjugationTable {
+  [tense: string]: {
+    [subject: string]: string;
+  };
+}
+
+interface FinalDictionaryJson {
+  dictionaryEntries: DictionaryParsedEntry[];
+  simpleForm: ConjugationTable;
+  continuousForm: ConjugationTable;
+}
+
+/** 
+ * Função principal que extrai e retorna o JSON final 
+ * conforme o formato solicitado.
+ */
+async function fetchDictionaryData(word: string): Promise<FinalDictionaryJson> {
   const url = `https://www.ldoceonline.com/dictionary/${encodeURIComponent(word)}`;
-  
-  // Requisição HTTP com timeout e cabeçalhos que simulam um navegador
+
   const { data: html } = await axios.get(url, {
     timeout: 10000,
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; MCP-Server/0.1.0)',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.5',
     },
   });
-  
+
   const $ = cheerio.load(html);
-  const dictionaryDiv = $('div.dictionary');
+
+  // ==========================
+  // 1) Extrair .dictentry (as entradas do dicionário)
+  // ==========================
+  const dictionaryEntries: DictionaryParsedEntry[] = [];
   
-  // Extração da introdução
-  const introduction = dictionaryDiv.find('span.dictionary_intro').first().text().trim();
-  
-  // Extração dos tópicos relacionados
-  const relatedTopics: string[] = [];
-  dictionaryDiv.find('span.related_topics + a.topic').each((_, element) => {
-    relatedTopics.push($(element).text().trim());
-  });
+  // Para cada <span class="dictentry">...
+  $('span.dictentry').each((_, dictentryEl) => {
+    const dictentry = $(dictentryEl);
 
-  // EXTRAÇÃO DAS ENTRADAS
-  const entries: EntryDetail[] = [];
-  const dictEntries = dictionaryDiv.find('span.dictentry');
-
-  // Função auxiliar para extrair objeto Audio a partir de um seletor HTML
-  const extractAudio = (htmlString: string): Audio => {
-    const el = cheerio.load(htmlString)('body').children().first();
-    return {
-      text: el.text().trim() || undefined,
-      audioUrl: el.attr('data-src-mp3') || null,
-    };
-  };
-
-  // Processa a primeira entrada (ex.: verbo)
-  const entryVerbEl = dictEntries.eq(0);
-  if (entryVerbEl) {
-    const header: Header = {
-      word: entryVerbEl.find('.HWD').first().text().trim() || word,
-      hyphenation: entryVerbEl.find('.HYPHENATION').first().text().trim() || word,
-      homographNumber: entryVerbEl.find('.HOMNUM').first().text().trim() || '1',
-      partOfSpeech: entryVerbEl.find('.POS').first().text().trim() || 'verb',
-      inflections: (() => {
-        const infText = entryVerbEl.find('.Inflections').first().text().replace(/[()]/g, '').trim();
-        return infText ? infText.split(',').map(s => s.trim()) : [];
-      })(),
-    };
-
-    const pronunciations: Pronunciations = {
-      british: extractAudio(entryVerbEl.find('span.brefile').first().toString()),
-      american: extractAudio(entryVerbEl.find('span.amefile').first().toString()),
-    };
-
-    const senses: Sense[] = [];
-    entryVerbEl.find('span.Sense').each((i, elem) => {
-      const senseEl = $(elem);
-      const number = Number.parseInt(senseEl.find('.sensenum').first().text().trim()) || i + 1;
-      const definition = senseEl.find('.DEF').first().text().trim();
-      const examples: Example[] = [];
-      senseEl.find('span.EXAMPLE').each((_, ex) => {
-        const exEl = $(ex);
-        examples.push({
-          text: exEl.text().trim(),
-          audioUrl: exEl.find('span.speaker').attr('data-src-mp3') || null,
-        });
-      });
-      const reference = senseEl.find('.Crossref a').first().text().trim() || undefined;
-      const colloquialExamples: Example[] = [];
-      senseEl.find('.ColloExa').each((_, colEx) => {
-        const colEl = $(colEx);
-        colloquialExamples.push({
-          text: colEl.find('.COLLO').text().trim(),
-          audioUrl: null,
-        });
-      });
-      senses.push({
-        number,
-        definition,
-        examples,
-        reference,
-        colloquialExamples: colloquialExamples.length > 0 ? colloquialExamples : undefined,
-      });
-    });
-
-    const entry1: EntryDetail = {
-      id: `${word}__1`,
-      type: 'verb',
-      header,
-      pronunciations,
-      senses,
-    };
-    entries.push(entry1);
-  }
-
-  // Processa a segunda entrada (ex.: substantivo)
-  const entryNounEl = dictEntries.eq(1);
-  if (entryNounEl) {
-    const header: Header = {
-      word: entryNounEl.find('.HWD').first().text().trim() || word,
-      hyphenation: entryNounEl.find('.HYPHENATION').first().text().trim() || word,
-      homographNumber: entryNounEl.find('.HOMNUM').first().text().trim() || '2',
-      partOfSpeech: entryNounEl.find('.POS').first().text().trim() || 'noun',
-    };
-
-    const pronunciations: Pronunciations = {
-      british: extractAudio(entryNounEl.find('span.brefile').first().toString()),
-      american: extractAudio(entryNounEl.find('span.amefile').first().toString()),
-    };
-
-    const senses: Sense[] = [];
-    entryNounEl.find('span.Sense').each((i, elem) => {
-      const senseEl = $(elem);
-      const number = Number.parseInt(senseEl.find('.sensenum').first().text().trim()) || i + 1;
-      const definition = senseEl.find('.DEF').first().text().trim();
-      const examples: Example[] = [];
-      senseEl.find('span.EXAMPLE').each((_, ex) => {
-        const exEl = $(ex);
-        examples.push({
-          text: exEl.text().trim(),
-          audioUrl: exEl.find('span.speaker').attr('data-src-mp3') || null,
-        });
-      });
-      senses.push({
-        number,
-        definition,
-        examples,
-      });
-    });
-
-    const entry2: EntryDetail = {
-      id: `${word}__3`,
-      type: 'noun',
-      header,
-      pronunciations,
-      senses,
-    };
-    entries.push(entry2);
-  }
-
-  // EXTRAÇÃO DOS CORPUS EXAMPLES a partir dos elementos com classe "assetlink" e "exaGroup"
-  const corpusExamples: CorpusExampleGroup[] = [];
-  $('span.assetlink span.exaGroup').each((i, groupElem) => {
-    const groupTitle = $(groupElem).find('span.title').first().text().trim();
-    const examples: string[] = [];
-    // Procura por exemplos dentro de elementos com classes que comecem com "cexa"
-    $(groupElem)
-      .find('span[class^="cexa"]')
-      .each((j, exElem) => {
-        const exText = $(exElem).text().trim();
-        if (exText) {
-          examples.push(exText);
-        }
-      });
-    if (groupTitle && examples.length > 0) {
-      corpusExamples.push({
-        group: groupTitle,
-        examples,
-      });
+    // Dentro dele, encontramos .ldoceEntry.Entry
+    const ldoceEntryEl = dictentry.find('.ldoceEntry.Entry').first();
+    if (!ldoceEntryEl || ldoceEntryEl.length === 0) {
+      return; // pula se não achar
     }
+
+    // Extrair "relatedTopics"
+    const relatedTopics: string[] = [];
+    ldoceEntryEl.find('.topics_container a.topic').each((_, topicEl) => {
+      relatedTopics.push($(topicEl).text().trim());
+    });
+
+    // Extrair "head" (palavra, pronúncia, etc.)
+    // Pode ser .frequent.Head ou .Head
+    const headEl = ldoceEntryEl.find('.frequent.Head, .Head').first();
+    const extractedWord = headEl.find('.HWD').text().trim() || word;
+    const hyphenation = headEl.find('.HYPHENATION').text().trim() || '';
+    const homnum = headEl.find('.HOMNUM').text().trim() || '';
+    const pos = headEl.find('.POS').text().trim() || '';
+    
+    // Pronúncia britânica e americana
+    const brit = headEl.find('span.brefile').attr('data-src-mp3');
+    const ame = headEl.find('span.amefile').attr('data-src-mp3');
+
+    // Ou extrair do .PronCodes:
+    let textPron = '';
+    const pronCodes = headEl.find('.PronCodes').first();
+    if (pronCodes && pronCodes.length > 0) {
+      // Montamos algo tipo "/rɒt/ (US: rɑːt)"
+      const pronSpans = pronCodes.find('span.PRON, span.AMEVARPRON, span.neutral');
+      let collected = '';
+      pronSpans.each((i, elSpan) => {
+        collected += $(elSpan).text();
+      });
+      textPron = collected.trim();
+    }
+
+    // Se preferir simplificar: "/rɒt/ (US: rɑːt)"
+    // ex: textPron = "/rɒt/ $ rɑːt/"
+    // convert $ -> (US:)
+    textPron = textPron.replace(/\s*\$\s*/g, '(US: ').replace(/\/\s*$/, '/)').replace(/\)\)/, ')');
+    if (!textPron.includes('(US:') && textPron.endsWith('/)')) {
+      textPron = textPron.replace('/)', '/');
+    }
+
+    // Inflections (ex. (rotted, rotting))
+    const inflectionsText = headEl.find('.Inflections').text().trim();
+    // ex. "(rotted, rotting)"
+    let inflections: string[] = [];
+    if (inflectionsText) {
+      // remove parênteses
+      const inf = inflectionsText.replace(/[()]/g, '');
+      // separa por vírgula
+      inflections = inf.split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    // 2) Extrair "senses"
+    const senses: DictionarySense[] = [];
+    ldoceEntryEl.find('.Sense').each((_, senseEl) => {
+      const sense = $(senseEl);
+      const number = Number.parseInt(sense.find('.sensenum').first().text().trim(), 10) || undefined;
+      const grammar = sense.find('.GRAM').text().trim() || undefined;
+      const activation = sense.find('.ACTIV').text().trim() || undefined;
+
+      // "Definition" pode ser um texto normal ou algo do tipo "(→ rot in hell/jail)"
+      const definitionText = sense.find('.DEF').text().trim();
+      let definitionObj: string | { text: string; url: string } = definitionText;
+
+      // Se a definition for algo tipo "(→ rot in hell/jail)",
+      // transformamos em { text: "🔗 rot in hell/jail", url: ... }
+      // Precisamos ver se há link .Crossref ou algo do tipo
+      if (!definitionText && sense.find('.Crossref a').length > 0) {
+        // ex: "rot in hell/jail"
+        const crossLink = sense.find('.Crossref a').first();
+        const crossText = crossLink.text().trim();
+        const crossHref = crossLink.attr('href');
+        if (crossText && crossHref) {
+          definitionObj = {
+            text: `🔗 ${crossText}`,
+            url: `https://www.ldoceonline.com${crossHref}`
+          };
+        }
+      }
+
+      // se for algo como a .DEF vem só com → e link
+      // ex: " → rot in hell/jail"
+      if (definitionText.startsWith('→')) {
+        // Tentar extrair a link
+        const crossLink = sense.find('.Crossref a').first();
+        if (crossLink && crossLink.length > 0) {
+          const crossText = crossLink.text().trim();
+          const crossHref = crossLink.attr('href');
+          definitionObj = {
+            text: `🔗 ${crossText}`,
+            url: `https://www.ldoceonline.com${crossHref}`
+          };
+        } else {
+          definitionObj = definitionText;
+        }
+      }
+
+      // Se a .DEF tiver link <a>, substituímos trechos "decay" e "gradual" etc?
+      // Faremos simples, manteremos o text.
+      // 3) Extrair EXAMPLE
+      const examples: DictionaryExample[] = [];
+      sense.find('.EXAMPLE').each((_, exEl) => {
+        const ex = $(exEl);
+        const text = ex.text().trim();
+        // pegar audio se houver
+        let audioUrl = ex.find('.speaker.exafile').attr('data-src-mp3');
+        if (!audioUrl) {
+          // ou exafile
+          audioUrl = ex.find('.speaker').attr('data-src-mp3') || undefined;
+        }
+        examples.push({
+          text,
+          audioUrl
+        });
+      });
+
+      senses.push({
+        number,
+        grammar: grammar || undefined,
+        activation: activation || undefined,
+        definition: definitionObj,
+        examples
+      });
+    });
+
+    dictionaryEntries.push({
+      word,
+      pronunciation: textPron || '',
+      partOfSpeech: pos || '',
+      inflections,
+      relatedTopics,
+      senses
+    });
   });
 
-  // EXTRAÇÃO DA ORIGEM a partir do bloco "etym"
-  const etymEl = $('span.etym');
-  const origin: Origin = {
-    word,
-    originId: etymEl.find('.HOMNUM').first().text().trim() || 'rot1',
-    language: etymEl.find('.LANG').first().text().trim() || 'Old English',
-    form: etymEl.find('.ORIGIN').first().text().trim() || 'rotian',
+  // ==========================
+  // 3) Extrair a Tabela (Verb table) -> simpleForm e continuousForm
+  // ==========================
+  // A tabela fica dentro de <div class="verbTable"> no snippet.
+  // Precisamos de .simpleForm e .continuousForm
+  const simpleForm: ConjugationTable = {};
+  const continuousForm: ConjugationTable = {};
+
+  // Achar <div class="verbTable">
+  const verbTableEl = $('.verbTable').first();
+  if (verbTableEl && verbTableEl.length > 0) {
+    // ============ SIMPLE FORM ============
+    const simpleFormEl = verbTableEl.find('table.simpleForm').first();
+    if (simpleFormEl && simpleFormEl.length > 0) {
+      parseConjugationTable(simpleFormEl, simpleForm);
+    }
+
+    // ============ CONTINUOUS FORM ============
+    const continuousFormEl = verbTableEl.find('table.continuousForm').first();
+    if (continuousFormEl && continuousFormEl.length > 0) {
+      parseConjugationTable(continuousFormEl, continuousForm);
+    }
+  }
+
+  // Montamos o objeto final
+  const finalJson: FinalDictionaryJson = {
+    dictionaryEntries,
+    simpleForm,
+    continuousForm
   };
 
-  const dictionaryEntry: DictionaryEntry = {
-    word,
-    introduction: introduction || "From Longman Dictionary of Contemporary English",
-    relatedTopics,
-    entries,
-    corpusExamples,
-    origin,
-  };
-
-  return dictionaryEntry;
+  return finalJson;
 }
 
-/* MCP Server – integra a função fetchDictionaryEntry */
+/**
+ * Função auxiliar que extrai as conjugações de um <table> (ex.: "simpleForm")
+ * e preenche o objeto de forma { Tense: { "I / you / we / they": "rot", ... } }
+ */
+/**
+ * Função auxiliar que extrai as conjugações de um <table> (ex.: "simpleForm")
+ * e preenche o objeto de forma { Tense: { "I / you / we / they": "rot", ... } }
+ */
+function parseConjugationTable(
+    tableEl: cheerio.Cheerio,
+    tableObj: ConjugationTable
+  ) {
+    const $table = cheerio.load(tableEl.html() || '');
+    let currentTense = ''; // Ex.: "Present", "Past", etc.
+  
+    $table('tr').each((_, trEl) => {
+      const tr = $table(trEl);
+  
+      // Verifica se é um header
+      const header = tr.find('td.header').text().trim();
+      if (header) {
+        return;
+      }
+  
+      if (tr.find('td.view_more, td.view_less').length > 0) {
+        return;
+      }
+  
+      // Se tiver <td class="col1">, assumimos que é um Tense
+      const col1Value = tr.find('td.col1').text().trim();
+      if (col1Value) {
+        currentTense = col1Value;
+        if (!tableObj[currentTense]) {
+          tableObj[currentTense] = {};
+        }
+        return;
+      }
+  
+      // senão, pegamos as colunas .col2 e interpretamos "subject" e "verbForm"
+      const col2First = tr.find('td.firsts.col2, td.col2').first();
+      const subject = col2First.text().trim();
+  
+      const col2Second = tr.find('td.col2').last();
+      const verbForm = col2Second.text().trim();
+  
+      // Armazenamos no objeto
+      if (currentTense && subject) {
+        tableObj[currentTense][subject] = verbForm;
+      }
+    });
+  }
+
+/* =======================
+   MCP Server
+   ======================= */
 class LdoceMcpServer {
   private server: Server;
 
   constructor() {
-    console.error('[Setup] Initializing MCP server for Longman Dictionary...');
+    console.error('[Setup] Initializing MCP server with JSON output...');
     this.server = new Server(
       {
-        name: 'ldoce-mcp-server',
-        id: 'ldoce-mcp-server',
+        name: 'ldoce-json-server',
+        id: 'ldoce-json-server',
         version: '0.1.0',
       },
       { capabilities: { tools: {} } }
@@ -303,13 +342,13 @@ class LdoceMcpServer {
       tools: [
         {
           name: 'get_dictionary_entry',
-          description: 'Busca e retorna a entrada do Longman Dictionary para uma palavra',
+          description: 'Busca o HTML do Longman para uma palavra e retorna JSON parseado (dictionaryEntries, simpleForm, continuousForm)',
           inputSchema: {
             type: 'object',
             properties: {
               word: {
                 type: 'string',
-                description: 'Palavra para buscar (ex: rot)',
+                description: 'A palavra a ser consultada (ex: rot)',
               },
             },
             required: ['word'],
@@ -321,27 +360,36 @@ class LdoceMcpServer {
     // Handler para a ferramenta get_dictionary_entry
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       try {
-        if (request.params.name !== 'get_dictionary_entry') {          
+        if (request.params.name !== 'get_dictionary_entry') {
           throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);
         }
         const args = request.params.arguments as { word: string };
         if (!args.word) {
           throw new McpError(ErrorCode.InvalidParams, '"word" parameter is required.');
         }
-        console.error(`[API] Searching entry for word: ${args.word}`);
-        const dictionaryEntry = await fetchDictionaryEntry(args.word);
+
+        console.error(`[API] Searching dictionary data for word: ${args.word}`);
+
+        // Busca o JSON extraído
+        const finalJson = await fetchDictionaryData(args.word);
+
+        // Retorna no "content" do MCP
+        // Observação: finalJson é objeto, precisamos serializar para string
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(dictionaryEntry, null, 2),
+              text: JSON.stringify(finalJson, null, 2),
             },
           ],
         };
-      // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-      } catch (error: any) {        
-        console.error('[Error] Failed to fetch entry:', error.message);
-        throw new McpError(ErrorCode.InternalError, `Falha ao buscar a entrada: ${error.message}`);
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error('[Error] Failed to fetch entry:', error.message);
+          throw new McpError(ErrorCode.InternalError, `Falha ao buscar a entrada: ${error.message}`);
+        }
+        console.error('[Error] Unknown error occurred');
+        throw new McpError(ErrorCode.InternalError, 'Falha ao buscar a entrada: Unknown error');
       }
     });
   }
@@ -349,9 +397,10 @@ class LdoceMcpServer {
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('Ldoce MCP server running via stdio');
+    console.error('Ldoce JSON server running via stdio');
   }
 }
 
+// Executar o servidor
 const serverInstance = new LdoceMcpServer();
 serverInstance.run().catch(console.error);
