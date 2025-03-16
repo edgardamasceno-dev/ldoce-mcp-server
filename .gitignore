@@ -1,0 +1,34 @@
+# Node modules
+node_modules/
+
+# Diretórios de build e distribuição
+build/
+dist/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache do npm
+.npm/
+
+# Cache do eslint
+.eslintcache
+
+# Histórico do REPL do Node.js
+.node_repl_history
+
+# Arquivos de ambiente
+.env
+
+# Arquivos do sistema
+.DS_Store
+
+# Configurações do editor/IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
