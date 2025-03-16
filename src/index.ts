@@ -278,6 +278,7 @@ class LdoceMcpServer {
     this.server = new Server(
       {
         name: 'ldoce-mcp-server',
+        id: 'ldoce-mcp-server',
         version: '0.1.0',
       },
       { capabilities: { tools: {} } }
@@ -285,6 +286,10 @@ class LdoceMcpServer {
 
     this.setupToolHandlers().catch(console.error);
     this.server.onerror = (error) => console.error('[Error]', error);
+    this.server.onclose = () => {
+      console.error('[Server] Connection closed');
+      process.exit(0);
+    };
     process.on('SIGINT', async () => {
       await this.server.close();
       process.exit(0);
