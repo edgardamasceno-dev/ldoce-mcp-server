@@ -274,7 +274,7 @@ class LdoceMcpServer {
   private server: Server;
 
   constructor() {
-    console.error('[Setup] Inicializando o MCP server para Longman Dictionary...');
+    console.error('[Setup] Initializing MCP server for Longman Dictionary...');
     this.server = new Server(
       {
         name: 'ldoce-mcp-server',
@@ -283,7 +283,7 @@ class LdoceMcpServer {
       { capabilities: { tools: {} } }
     );
 
-    this.setupToolHandlers();
+    this.setupToolHandlers().catch(console.error);
     this.server.onerror = (error) => console.error('[Error]', error);
     process.on('SIGINT', async () => {
       await this.server.close();
@@ -291,7 +291,7 @@ class LdoceMcpServer {
     });
   }
 
-  private setupToolHandlers() {
+  private async setupToolHandlers() {
     // Handler para listar as ferramentas disponíveis
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
@@ -315,14 +315,14 @@ class LdoceMcpServer {
     // Handler para a ferramenta get_dictionary_entry
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       try {
-        if (request.params.name !== 'get_dictionary_entry') {
-          throw new McpError(ErrorCode.MethodNotFound, `Ferramenta desconhecida: ${request.params.name}`);
+        if (request.params.name !== 'get_dictionary_entry') {          
+          throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);
         }
         const args = request.params.arguments as { word: string };
         if (!args.word) {
-          throw new McpError(ErrorCode.InvalidParams, 'Parâmetro "word" é obrigatório.');
+          throw new McpError(ErrorCode.InvalidParams, '"word" parameter is required.');
         }
-        console.error(`[API] Buscando entrada para a palavra: ${args.word}`);
+        console.error(`[API] Searching entry for word: ${args.word}`);
         const dictionaryEntry = await fetchDictionaryEntry(args.word);
         return {
           content: [
@@ -333,8 +333,8 @@ class LdoceMcpServer {
           ],
         };
       // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-      } catch (error: any) {
-        console.error('[Error] Falha ao buscar a entrada:', error.message);
+      } catch (error: any) {        
+        console.error('[Error] Failed to fetch entry:', error.message);
         throw new McpError(ErrorCode.InternalError, `Falha ao buscar a entrada: ${error.message}`);
       }
     });
@@ -343,7 +343,7 @@ class LdoceMcpServer {
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('Ldoce MCP server rodando via stdio');
+    console.error('Ldoce MCP server running via stdio');
   }
 }
 
