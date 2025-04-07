@@ -1,4 +1,6 @@
 # Ldoce MCP Server
+[![smithery badge](https://smithery.ai/badge/@edgardamasceno-dev/ldoce-mcp-server)](https://smithery.ai/server/@edgardamasceno-dev/ldoce-mcp-server)
+
 
 Este é um MCP server desenvolvido em Node.js e TypeScript que consome a página do Longman Dictionary para uma determinada palavra e retorna os dados extraídos no formato JSON padronizado para uso por agentes de IA.
 
@@ -24,6 +26,15 @@ O servidor se conecta à URL `https://www.ldoceonline.com/dictionary/<word>`, ex
 
 ## Instalação
 
+### Installing via Smithery
+
+To install Ldoce Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@edgardamasceno-dev/ldoce-mcp-server):
+
+```bash
+npx -y @smithery/cli install @edgardamasceno-dev/ldoce-mcp-server --client claude
+```
+
+### Manual Installation
 1. Clone o repositório:
    ```bash
    git clone https://github.com/seuusuario/ldoce-mcp-server.git
