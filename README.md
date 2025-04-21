@@ -1,6 +1,9 @@
 # Ldoce MCP Server
 [![smithery badge](https://smithery.ai/badge/@edgardamasceno-dev/ldoce-mcp-server)](https://smithery.ai/server/@edgardamasceno-dev/ldoce-mcp-server)
 
+<a href="https://glama.ai/mcp/servers/@edgardamasceno-dev/ldoce-mcp-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@edgardamasceno-dev/ldoce-mcp-server/badge" alt="Longman Dictionary Server MCP server" />
+</a>
 
 Este é um MCP server desenvolvido em Node.js e TypeScript que consome a página do Longman Dictionary para uma determinada palavra e retorna os dados extraídos no formato JSON padronizado para uso por agentes de IA.
 
